@@ -589,7 +589,7 @@ static auto operateDevice(
     libusb_device_handle *devHandle = 0;
     auto fail0 = libusb_open(dev, &devHandle);
     if(fail0) {
-        LOG_WRN("libusb_open failed on selected device -- giving up");
+        LOG_WRN("libusb_open failed on selected device -- giving up - %s", libusb_strerror((libusb_error)fail0));
         exit(1);
     }
     usbDevice.devHandle = devHandle;
@@ -680,7 +680,7 @@ static auto operateDevice(
         );
         if(0!=fail || len!=bytesWritten) {
             LOG_WRN("failed to send message %s -- giving up", msgName);
-            LOG_WRN("libusb error was :%s", libusb_strerror(fail));
+            LOG_WRN("libusb error was :%s", libusb_strerror((libusb_error)fail));
             exit(1);
         }
         LOG_NFO(
@@ -719,7 +719,7 @@ static auto operateDevice(
         );
         if(0!=fail) {
             LOG_WRN("failed to receive message %s -- giving up", msgName);
-            LOG_WRN("libusb error was :%s", libusb_strerror(fail));
+            LOG_WRN("libusb error was :%s", libusb_strerror((libusb_error)fail));
             exit(1);
         }
 
@@ -776,7 +776,7 @@ static auto operateDevice(
         );
         if(bytesRead<=0) {
             LOG_WRN("failed " PHASE_1 " -- giving up");
-            LOG_WRN("libusb error was :%s", libusb_strerror(bytesRead));
+            LOG_WRN("libusb error was :%s", libusb_strerror((libusb_error)bytesRead));
             exit(1);
         }
         LOG_NFO(PHASE_1 " succeeded");
@@ -1186,12 +1186,16 @@ static auto operateDevice(
                 auto dd = cvt(buffer[ 9 + o]);
                 auto hh = cvt(buffer[10 + o]);
                 auto mn = cvt(buffer[11 + o]);
+                
+		//following parsing changes work only for Accu-Check Active USB (0x21cc)
 
+		auto ss = ((uint16_t)buffer[13 + o] >> 8) | buffer[12 + o];
                 // load value and status
                 auto ro = (14 + o);
                 auto vv = be16r(buffer, ro);
-                auto ss = be16r(buffer, ro);
-                o += 12;
+                // auto ss = be16r(buffer, ro);
+                // o += 12;
+		o += 10;
 
                 // dump sample
                 LOG_NFO(
@@ -1219,10 +1223,11 @@ static auto operateDevice(
                 auto epoch = timelocal(&t);
 
                 // write sample as JSON
-                if(0==ss) {
+                // if(0==ss) { // eliminates all records for Accu-Check Active USB so maybe a specific bit must be checked in status code?!
+                if(true) { 
                     fprintf(
                         g_output,
-                        "%s\n    { \"id\":%6d, \"epoch\":%11" PRIu64 ", \"timestamp\":\"%02d%02d/%02d/%02d %02d:%02d\", \"mg/dL\":%3d, \"mmol/L\":%10.6f }",
+                        "%s\n    { \"id\":%6d, \"epoch\":%11" PRIu64 ", \"timestamp\":\"%02d%02d/%02d/%02d %02d:%02d\", \"mg/dL\":%3d, \"mmol/L\":%10.6f, \"status\": \"0x%02X\" }",
                         (g_firstLine ? "" : ","),
                         (int)(g_lineCount++),
                         (uint64_t)epoch,
@@ -1233,7 +1238,8 @@ static auto operateDevice(
                         (int)hh,
                         (int)mn,
                         (int)vv,
-                        (vv / 18.0)
+                        (vv / 18.0),
+			ss
                     );
                     g_firstLine = false;
                 }
@@ -1380,7 +1386,7 @@ static auto addDeviceIfAccuChek(
         libusb_device_handle *devHandle = 0;
         auto fail1 = libusb_open(dev, &devHandle);
         if(fail1) {
-            LOG_WRN("libusb_open failed, giving up");
+            LOG_WRN("libusb_open failed, giving up  - %s", libusb_strerror((libusb_error)fail1));
             break;
         }
 
